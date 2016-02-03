@@ -1,0 +1,196 @@
+//Ryan Nguyen
+//Contact: ryan.nguyen25@uga.edu
+//Create a text editor using ncurses library and low level I/O. This file holds main.
+
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string>
+#include <ncurses.h>
+#include <menu.h>
+#include "pfunc.h"
+
+WINDOW *create_newwin(int height, int width, int starty, int startx);
+
+int main(const int argc, const char * argv[]){
+	initscr();
+
+	refresh();
+	
+	const char * filename;
+	
+	if(argc==2){
+		filename = argv[1];
+	}
+	else {
+		char mesg[] = "Enter a file name: ";
+		printw(mesg);
+		refresh();
+		char * filename2;
+		getstr(filename2);
+		filename = filename2;
+		clear();
+	}	
+
+/*	if(fd == -1){
+		WINDOW * errorwindow;
+		errorwindow = create_newwin(LINES/2, COLS/2, (LINES-(LINES/2))/2, (COLS-(COLS/2))/2);
+		wborder(errorwindow, '|', '|', '_','_','_','_','|','|');	
+		wprintw(errorwindow, "%s", "An error has occurred. Could not open ");
+		wprintw(errorwindow, "%c", filename);
+		wprintw(errorwindow, "%s", "\nError: ");
+		wprintw(errorwindow, "%s", strerror(errno));
+		wrefresh(errorwindow);
+	}
+*/
+
+	noecho();	
+
+	//stdscr window labels
+	printw("F1: Menu");
+	mvprintw(LINES-1, 0, "%s", filename);
+	mvprintw(0, COLS/2-8, "%s", "CSCI 1730 Editor!");
+	refresh();
+
+	//border window
+	int startx, starty, width, height;
+	height = LINES-6;
+	width = COLS-2;
+	starty = (LINES-height)/2;
+	startx = (COLS-width)/2;
+	WINDOW * border;
+	border = create_newwin(height, width, starty,startx);
+	wborder(border, '|', '|', '_','_','_','_','|','|');
+//	wrefresh(border);
+
+	//input window
+	WINDOW * textfield;
+	textfield = create_newwin(height-2, width-2, starty+1, startx+1);
+	keypad(textfield, TRUE);
+	wrefresh(textfield);
+	wrefresh(border);
+
+	int fd = open(filename, O_RDONLY);
+	int n;
+	char buffer[256];
+	while((n=read(fd, buffer, 256)) >0) {
+		if(n!=256) buffer[n] = '\0';
+		wprintw(textfield, "%s", buffer);
+		wrefresh(textfield);
+	}
+	
+	int ch;
+	while(ch=wgetch(textfield)){
+		switch(ch){
+			case(KEY_F(1)):
+			{	
+				//menu
+				char const * choices[] = {
+							"Open",
+							"Save",
+							"Save As",
+							"Exit",
+							(char *)NULL,
+						  };
+				int n_choices;
+				int c;
+				WINDOW * menuop_win;
+				MENU * menuop;
+				ITEM ** menuop_items;
+//				n_choices = (sizeof(choices)/sizeof(choices[0]));
+				n_choices = 5;
+				menuop_items = (ITEM **)calloc(n_choices, sizeof(ITEM **));
+				for(int j=0; j<n_choices; ++j){
+					menuop_items[j] = new_item(choices[j], choices[j]);
+				}
+				menuop = new_menu((ITEM **)menuop_items);
+				menuop_win = newwin(10,40,4,4);
+				keypad(menuop_win, TRUE);
+				
+				set_menu_win(menuop, menuop_win);
+				set_menu_sub(menuop, derwin(menuop_win, 6, 38, 3, 1));
+				
+				set_menu_mark(menuop, " * ");
+				box(menuop_win, 0, 0);
+				refresh();
+				
+				post_menu(menuop);
+				wrefresh(menuop_win);
+
+				while(c=wgetch(menuop_win)){
+					switch(c) {
+						case(KEY_DOWN):
+							menu_driver(menuop,REQ_DOWN_ITEM);
+							break;
+						case(KEY_UP):
+							menu_driver(menuop,REQ_UP_ITEM);
+							break;
+						case(KEY_F(1)):
+							unpost_menu(menuop);
+							free_menu(menuop);
+							for(int k=0; k<n_choices; ++k)
+								free_item(menuop_items[k]);
+							break;
+					}
+					wrefresh(menuop_win);
+				}
+				
+			}	break;
+				
+			case(KEY_BACKSPACE):
+				wdelch(textfield);
+				break;	
+			default:
+				wprintw(textfield, "%c", ch);
+				break;
+		}	
+		wrefresh(textfield);
+	}	
+
+	endwin();
+	return 0;
+
+}
+
+
+
+WINDOW *create_newwin(int height, int width, int starty, int startx)
+{	WINDOW *local_win;
+
+	local_win = newwin(height, width, starty, startx);
+	box(local_win, 0 , 0); 
+		
+	wrefresh(local_win);
+
+	return local_win;
+}
+
+void readfile(const char * filename){
+	int fd = open(filename, O_RDONLY);
+	if(fd == -1){				//when fd is -1, an error has occurred. print error message to ncurses window
+		char mg[] = "An error has occurred. Could not open ";
+		printw(mg);
+		printw(filename);
+		printw("\nError: ");
+		printw(strerror(errno));
+		refresh();
+	} //if(fd == -1)
+	int n;
+	char buffer[256];
+	while((n=read(fd, buffer, 256)) > 0) {	//reads file that has been opened with fd. reads 256 characters (same as buffer size)
+		if(n!=256) buffer[n]='\0';
+		printw(buffer);
+	}//while
+	
+	int cr = close(fd);			//closes file
+	if (cr == -1){				//when cr is -1, an error has occurred. print error message to ncurses window
+		clear();
+		char mg2[] = "An error has occurred. Could not close. \nError: ";
+		printw(mg2);
+		printw(strerror(errno));
+		refresh();
+	} //if(cr == -1)
+} //readfile()
+
